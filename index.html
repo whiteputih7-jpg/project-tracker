@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#16232F;
+    --blue-deep:#1E3A5F;
+    --blue-line:#B9CBDC;
+    --blue-tint:#EEF3F8;
+    --paper:#FCFDFE;
+    --red:#D6431F;
+    --red-tint:#FCE7E1;
+    --green:#3E7A5C;
+    --white:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(var(--blue-line) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--blue-line) 1px, transparent 1px) 0 0/40px 40px,
+      var(--paper);
+    background-attachment:fixed;
+    min-height:100vh;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  header{
+    border:2px solid var(--blue-deep);
+    background:var(--white);
+    margin:24px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:stretch;
+  }
+  header .title-main{
+    flex:1;
+    padding:18px 24px;
+    border-right:2px solid var(--blue-deep);
+    min-width:220px;
+  }
+  header .title-main h1{
+    margin:0;
+    font-size:22px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+  }
+  header .title-main p{
+    margin:6px 0 0;
+    font-size:12px;
+    color:#5A6B7A;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  header .stat{
+    padding:10px 20px;
+    border-right:1px solid var(--blue-line);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    min-width:110px;
+  }
+  header .stat:last-child{border-right:none;}
+  header .stat .n{font-size:24px;font-weight:600;}
+  header .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#5A6B7A;font-family:'IBM Plex Mono',monospace;}
+  header .stat.urgent .n{color:var(--red);}
+
+  .toolbar{
+    margin:0 24px 20px;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  button{
+    font-family:'Inter',sans-serif;
+    cursor:pointer;
+    border:1.5px solid var(--blue-deep);
+    background:var(--white);
+    color:var(--blue-deep);
+    padding:8px 14px;
+    font-size:13px;
+    font-weight:600;
+    border-radius:2px;
+    transition:background .15s, color .15s;
+  }
+  button:hover{background:var(--blue-deep);color:var(--white);}
+  button.primary{background:var(--blue-deep);color:var(--white);}
+  button.primary:hover{background:var(--ink);}
+  button.ghost{border-color:var(--blue-line);color:#5A6B7A;}
+  button.ghost:hover{background:var(--blue-tint);color:var(--ink);}
+  .sync-note{font-size:11px;color:#8A97A3;font-family:'IBM Plex Mono',monospace;margin-left:auto;}
+
+  #banner{margin:0 24px 16px;padding:10px 14px;font-size:13px;border-radius:2px;display:none;}
+  #banner.error{display:block;background:var(--red-tint);border:1px solid var(--red);color:var(--red);}
+  #banner.info{display:block;background:var(--blue-tint);border:1px solid var(--blue-line);color:var(--blue-deep);}
+
+  #board{
+    margin:0 24px 40px;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    gap:18px;
+  }
+  .card{
+    background:var(--white);
+    border:1.5px solid var(--blue-deep);
+    position:relative;
+    padding-bottom:6px;
+  }
+  .card::before, .card::after{
+    content:'';
+    position:absolute;
+    width:8px;height:8px;
+    border:1.5px solid var(--blue-deep);
+    top:-1.5px;
+  }
+  .card::before{left:-1.5px;border-right:none;border-bottom:none;}
+  .card::after{right:-1.5px;border-left:none;border-bottom:none;}
+  .card.has-urgent{border-color:var(--red);}
+  .card.has-urgent::before, .card.has-urgent::after{border-color:var(--red);}
+
+  .card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 14px;
+    border-bottom:1.5px solid var(--blue-deep);
+  }
+  .card.has-urgent .card-head{border-bottom-color:var(--red);}
+  .card-head h2{
+    margin:0;
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+  }
+  .card-head .del{
+    font-size:11px;color:#B0BAC3;cursor:pointer;border:none;background:none;padding:2px 4px;
+  }
+  .card-head .del:hover{color:var(--red);}
+
+  .task-list{list-style:none;margin:0;padding:8px 0;}
+  .task-row{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    padding:7px 14px;
+    font-size:13px;
+    line-height:1.4;
+  }
+  .task-row.urgent{background:var(--red-tint);border-left:3px solid var(--red);padding-left:11px;}
+  .task-row input[type=checkbox]{
+    margin-top:2px;
+    accent-color:var(--blue-deep);
+    width:15px;height:15px;
+    flex-shrink:0;
+  }
+  .task-row .txt{flex:1;}
+  .task-row .meta{font-size:10px;color:#8A97A3;font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+  .flag-btn{
+    border:none;background:none;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;flex-shrink:0;
+  }
+  .task-row.urgent .flag-btn{color:var(--red);}
+  .task-row:not(.urgent) .flag-btn{color:#C7D0D8;}
+
+  .empty-msg{padding:14px;font-size:12px;color:#8A97A3;font-family:'IBM Plex Mono',monospace;}
+
+  .add-task-row{
+    display:flex;gap:6px;padding:10px 14px 4px;border-top:1px dashed var(--blue-line);
+  }
+  .add-task-row input[type=text]{
+    flex:1;border:1px solid var(--blue-line);padding:6px 8px;font-size:13px;font-family:'Inter',sans-serif;border-radius:2px;
+  }
+  .add-task-row input[type=text]:focus{outline:2px solid var(--blue-deep);outline-offset:-1px;}
+  .add-task-row .urgent-toggle{
+    border:1px solid var(--blue-line);background:var(--white);color:#8A97A3;font-size:16px;padding:0 8px;border-radius:2px;cursor:pointer;
+  }
+  .add-task-row .urgent-toggle.on{background:var(--red);color:var(--white);border-color:var(--red);}
+  .add-task-row button.add-submit{padding:6px 10px;font-size:13px;}
+
+  #history-wrap{margin:0 24px 40px;}
+  #history-list{
+    background:var(--white);border:1.5px solid var(--blue-line);
+    max-height:260px;overflow-y:auto;
+  }
+  .hist-row{
+    display:flex;justify-content:space-between;gap:10px;
+    padding:8px 14px;font-size:12.5px;border-bottom:1px solid var(--blue-tint);
+  }
+  .hist-row .proj{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--green);text-transform:uppercase;}
+  .hist-row .date{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8A97A3;white-space:nowrap;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(22,35,47,0.4);
+    display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:var(--white);border:2px solid var(--blue-deep);padding:24px;width:320px;
+  }
+  .modal h3{margin:0 0 14px;font-size:15px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;}
+  .modal input[type=text], .modal textarea{
+    width:100%;padding:8px;border:1px solid var(--blue-line);font-family:'Inter',sans-serif;font-size:14px;margin-bottom:12px;border-radius:2px;
+  }
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;}
+  .modal label.small{font-size:11px;color:#5A6B7A;font-family:'IBM Plex Mono',monospace;text-transform:uppercase;display:block;margin-bottom:4px;}
+
+  footer{
+    text-align:center;font-size:11px;color:#A2ADB6;font-family:'IBM Plex Mono',monospace;padding:20px;
+  }
+
+  @media (max-width:600px){
+    header .title-main{border-right:none;border-bottom:2px solid var(--blue-deep);}
+    #board{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-main">
+    <h1>Project Tracker</h1>
+    <p id="synced-line">menyambungkan ke database...</p>
+  </div>
+  <div class="stat">
+    <div class="n" id="stat-projects">0</div>
+    <div class="l">Project</div>
+  </div>
+  <div class="stat">
+    <div class="n" id="stat-tasks">0</div>
+    <div class="l">Task Aktif</div>
+  </div>
+  <div class="stat urgent">
+    <div class="n" id="stat-urgent">0</div>
+    <div class="l">Urgent</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="primary" onclick="openProjectModal()">+ Project Baru</button>
+  <button class="ghost" onclick="toggleHistory()">Riwayat Selesai</button>
+  <span class="sync-note" id="sync-note"></span>
+</div>
+
+<div id="banner"></div>
+
+<div id="board"></div>
+
+<div id="history-wrap" style="display:none;">
+  <div id="history-list"></div>
+</div>
+
+<footer>disambungkan ke Supabase (realtime)</footer>
+
+<div class="modal-overlay" id="project-modal">
+  <div class="modal">
+    <h3>Project Baru</h3>
+    <label class="small">Nama Project</label>
+    <input type="text" id="new-project-name" placeholder="cth: Rumah Ricky">
+    <div class="row">
+      <button class="ghost" onclick="closeModal('project-modal')">Batal</button>
+      <button class="primary" onclick="submitNewProject()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- Supabase config (anon/publishable key is safe to expose; access is controlled by RLS policies) ----
+const SUPABASE_URL = 'https://jvmuuxihmvtdchittwhq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_LSd7KnvdVjxWr1FZKFSnyg_laZKWYiI';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let state = { projects: [], tasks: [] };
+
+function showBanner(msg, type){
+  const b = document.getElementById('banner');
+  b.textContent = msg;
+  b.className = type;
+}
+function hideBanner(){ document.getElementById('banner').className = ''; }
+
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openProjectModal(){
+  document.getElementById('new-project-name').value = '';
+  openModal('project-modal');
+}
+
+function setSyncing(on){
+  document.getElementById('sync-note').textContent = on ? 'menyimpan...' : ('tersimpan ' + new Date().toLocaleTimeString('id-ID'));
+}
+
+async function loadData(){
+  document.getElementById('sync-note').textContent = 'memuat...';
+  const [{ data: projects, error: pErr }, { data: tasks, error: tErr }] = await Promise.all([
+    sb.from('projects').select('name').order('created_at'),
+    sb.from('tasks').select('*').order('date_created')
+  ]);
+  if(pErr || tErr){
+    showBanner('Gagal memuat data dari Supabase: ' + (pErr?.message || tErr?.message), 'error');
+    return;
+  }
+  hideBanner();
+  state.projects = projects.map(p => p.name);
+  state.tasks = tasks.map(t => ({
+    id: t.id,
+    project: t.project_name,
+    task: t.task,
+    urgent: t.urgent,
+    dateCreated: t.date_created,
+    dateCompleted: t.date_completed,
+    status: t.status
+  }));
+  document.getElementById('synced-line').textContent = 'tersambung ke Supabase';
+  document.getElementById('sync-note').textContent = 'terakhir sync ' + new Date().toLocaleTimeString('id-ID');
+  render();
+}
+
+function render(){
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+
+  const activeTasks = state.tasks.filter(t => t.status !== 'Selesai');
+  const allProjectNames = Array.from(new Set([...state.projects, ...state.tasks.map(t=>t.project)]));
+
+  document.getElementById('stat-projects').textContent = allProjectNames.length;
+  document.getElementById('stat-tasks').textContent = activeTasks.length;
+  document.getElementById('stat-urgent').textContent = activeTasks.filter(t=>t.urgent).length;
+
+  if(allProjectNames.length === 0){
+    board.innerHTML = '<div class="empty-msg">Belum ada project. Klik "+ Project Baru" untuk mulai.</div>';
+  }
+
+  allProjectNames.forEach(projectName => {
+    const tasksForProject = activeTasks.filter(t => t.project === projectName)
+      .sort((a,b)=> (b.urgent - a.urgent));
+    const hasUrgent = tasksForProject.some(t=>t.urgent);
+
+    const card = document.createElement('div');
+    card.className = 'card' + (hasUrgent ? ' has-urgent' : '');
+
+    const head = document.createElement('div');
+    head.className = 'card-head';
+    head.innerHTML = `<h2>${escapeHtml(projectName)}</h2><button class="del" title="Hapus project" onclick="removeProject('${escapeAttr(projectName)}')">✕</button>`;
+    card.appendChild(head);
+
+    const list = document.createElement('ul');
+    list.className = 'task-list';
+    if(tasksForProject.length === 0){
+      list.innerHTML = '<div class="empty-msg">Belum ada task.</div>';
+    }
+    tasksForProject.forEach(t => {
+      const li = document.createElement('li');
+      li.className = 'task-row' + (t.urgent ? ' urgent' : '');
+      li.innerHTML = `
+        <input type="checkbox" onchange="completeTask('${t.id}')">
+        <div class="txt">${escapeHtml(t.task)}<div class="meta">dibuat ${formatDate(t.dateCreated)}</div></div>
+        <button class="flag-btn" title="Tandai urgent" onclick="toggleUrgent('${t.id}', ${!t.urgent})">⚑</button>
+      `;
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+
+    const addRow = document.createElement('div');
+    addRow.className = 'add-task-row';
+    addRow.innerHTML = `
+      <button class="urgent-toggle" data-urgent="0" onclick="toggleAddUrgent(this)">⚑</button>
+      <input type="text" placeholder="Task baru..." onkeydown="if(event.key==='Enter') submitNewTask('${escapeAttr(projectName)}', this)">
+      <button class="add-submit primary" onclick="submitNewTask('${escapeAttr(projectName)}', this.previousElementSibling)">+</button>
+    `;
+    card.appendChild(addRow);
+
+    board.appendChild(card);
+  });
+
+  renderHistory();
+}
+
+function toggleAddUrgent(btn){
+  const on = btn.getAttribute('data-urgent') === '1';
+  btn.setAttribute('data-urgent', on ? '0' : '1');
+  btn.classList.toggle('on', !on);
+}
+
+async function submitNewProject(){
+  const name = document.getElementById('new-project-name').value.trim();
+  if(!name) return;
+  closeModal('project-modal');
+  if(state.projects.includes(name)){ showBanner('Project sudah ada', 'error'); return; }
+
+  state.projects.push(name);
+  render();
+  setSyncing(true);
+  const { error } = await sb.from('projects').insert({ name });
+  if(error){ showBanner(error.message, 'error'); state.projects = state.projects.filter(p=>p!==name); render(); }
+  setSyncing(false);
+}
+
+async function removeProject(name){
+  if(!confirm('Hapus project "'+name+'" beserta semua tasknya?')) return;
+  const backupProjects = [...state.projects];
+  const backupTasks = [...state.tasks];
+  state.projects = state.projects.filter(p => p !== name);
+  state.tasks = state.tasks.filter(t => t.project !== name);
+  render();
+
+  setSyncing(true);
+  const { error } = await sb.from('projects').delete().eq('name', name);
+  if(error){ showBanner(error.message, 'error'); state.projects = backupProjects; state.tasks = backupTasks; render(); }
+  setSyncing(false);
+}
+
+async function submitNewTask(project, inputEl){
+  const text = inputEl.value.trim();
+  if(!text) return;
+  const urgentBtn = inputEl.previousElementSibling;
+  const urgent = urgentBtn.getAttribute('data-urgent') === '1';
+  inputEl.value = '';
+  urgentBtn.setAttribute('data-urgent','0');
+  urgentBtn.classList.remove('on');
+
+  const tempId = 'temp-' + Date.now();
+  const nowStr = new Date().toISOString();
+  state.tasks.push({ id: tempId, project, task: text, urgent, dateCreated: nowStr, dateCompleted: '', status: 'Belum' });
+  render();
+
+  setSyncing(true);
+  const { data, error } = await sb.from('tasks')
+    .insert({ project_name: project, task: text, urgent })
+    .select().single();
+  if(error){
+    showBanner(error.message, 'error');
+    state.tasks = state.tasks.filter(t => t.id !== tempId);
+    render();
+  } else {
+    const t = state.tasks.find(t => t.id === tempId);
+    if(t) t.id = data.id;
+  }
+  setSyncing(false);
+}
+
+async function completeTask(id){
+  const t = state.tasks.find(t => t.id === id);
+  if(!t) return;
+  const backup = { ...t };
+  t.status = 'Selesai';
+  t.dateCompleted = new Date().toISOString();
+  render();
+
+  setSyncing(true);
+  const { error } = await sb.from('tasks').update({ status: 'Selesai', date_completed: t.dateCompleted }).eq('id', id);
+  if(error){ showBanner(error.message, 'error'); Object.assign(t, backup); render(); }
+  setSyncing(false);
+}
+
+async function toggleUrgent(id, urgent){
+  const t = state.tasks.find(t => t.id === id);
+  if(!t) return;
+  const backup = t.urgent;
+  t.urgent = urgent;
+  render();
+
+  setSyncing(true);
+  const { error } = await sb.from('tasks').update({ urgent }).eq('id', id);
+  if(error){ showBanner(error.message, 'error'); t.urgent = backup; render(); }
+  setSyncing(false);
+}
+
+function renderHistory(){
+  const wrap = document.getElementById('history-list');
+  const done = state.tasks.filter(t => t.status === 'Selesai')
+    .sort((a,b)=> new Date(b.dateCompleted) - new Date(a.dateCompleted));
+  if(done.length === 0){
+    wrap.innerHTML = '<div class="empty-msg">Belum ada task selesai.</div>';
+    return;
+  }
+  wrap.innerHTML = done.map(t => `
+    <div class="hist-row">
+      <div><span class="proj">${escapeHtml(t.project)}</span><br>${escapeHtml(t.task)}</div>
+      <div class="date">selesai ${formatDate(t.dateCompleted)}</div>
+    </div>
+  `).join('');
+}
+
+function toggleHistory(){
+  const el = document.getElementById('history-wrap');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function formatDate(d){
+  if(!d) return '-';
+  const dt = new Date(d);
+  if(isNaN(dt)) return d;
+  return dt.toLocaleString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(str){
+  return String(str).replace(/'/g, "\\'");
+}
+
+// ---- Realtime sync across devices ----
+sb.channel('public:tasks-projects')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => loadData())
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => loadData())
+  .subscribe();
+
+loadData();
+</script>
+
+</body>
+</html>
