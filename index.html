@@ -189,10 +189,13 @@
   .add-task-row .img-upload-btn{border:1px solid var(--blue-line);background:var(--white);color:var(--blue-deep);font-size:14px;padding:0 8px;border-radius:2px;cursor:pointer;flex-shrink:0;}
   .add-task-row .img-upload-btn:hover{background:var(--blue-tint);}
   .add-task-row input[type=file]{display:none;}
-  .img-preview-wrap{margin-top:8px;display:none;position:relative;max-width:180px;}
-  .img-preview-wrap .img-preview{max-width:180px;max-height:120px;width:auto;height:auto;border:1px solid var(--blue-line);border-radius:2px;display:block;object-fit:cover;}
-  .img-remove-btn{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid var(--blue-line);background:var(--white);color:var(--red);font-size:12px;line-height:1;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-  .img-remove-btn:hover{background:var(--red-tint);}
+  .img-preview-wrap{margin-top:8px;display:none;gap:8px;flex-wrap:wrap;}
+  .img-preview-thumb-wrap{position:relative;display:inline-block;max-width:90px;}
+  .img-preview-thumb-wrap .img-preview{max-width:90px;max-height:70px;width:auto;height:auto;border:1px solid var(--blue-line);border-radius:2px;display:block;object-fit:cover;}
+  .img-preview-thumb-wrap .img-remove-btn{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--blue-line);background:var(--white);color:var(--red);font-size:10px;line-height:1;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .img-preview-thumb-wrap .img-remove-btn:hover{background:var(--red-tint);}
+  .task-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .task-img{max-width:100%;border-radius:2px;border:1px solid var(--blue-tint);}
   .task-img{max-width:100%;margin-top:6px;border-radius:2px;border:1px solid var(--blue-tint);}
   .task-caption{font-size:12px;color:#5A6B7A;margin-top:4px;font-style:italic;}
 
@@ -373,12 +376,15 @@ function render(){
       const li = document.createElement('li');
       li.className = 'task-row' + (t.urgent ? ' urgent' : '');
       let taskHtml = '';
-      if(t.image_data){
-        taskHtml += `<img src="${escapeAttr(t.image_data)}" class="task-img" alt="task image">`;
+      const imgs = getImageArray(t.image_data);
+      if(imgs.length){
+        taskHtml += '<div class="task-images">';
+        imgs.forEach(src => { taskHtml += `<img src="${escapeAttr(src)}" class="task-img" alt="task image">`; });
+        taskHtml += '</div>';
       }
       if(t.caption){
         taskHtml += `<div class="task-caption">${escapeHtml(t.caption)}</div>`;
-      } else if(!t.image_data) {
+      } else if(!imgs.length) {
         taskHtml += escapeHtml(t.task);
       }
       li.innerHTML = `
@@ -392,18 +398,16 @@ function render(){
 
     const addWrap = document.createElement('div');
     addWrap.className = 'add-task-wrap';
+    addWrap._pendingImages = [];
     addWrap.innerHTML = `
       <div class="add-task-row">
         <button class="urgent-toggle" data-urgent="0" onclick="toggleAddUrgent(this)">⚑</button>
-        <input type="text" class="task-input" placeholder="Task baru... (Ctrl+V untuk paste gambar)" onpaste="handlePaste(event, this, this.closest('.add-task-wrap').querySelector('.img-preview-input'))" onkeydown="handleInputKey(event, '${escapeAttr(projectName)}', this, this.closest('.add-task-wrap').querySelector('.img-preview-input'))" style="flex:1;">
-        <input type="file" class="img-preview-input" accept="image/*" onchange="previewImage(this)" style="display:none;">
+        <input type="text" class="task-input" placeholder="Task baru... (Ctrl+V untuk beberapa gambar)" onpaste="handlePaste(event, this, this.closest('.add-task-wrap').querySelector('.img-preview-input'))" onkeydown="handleInputKey(event, '${escapeAttr(projectName)}', this, this.closest('.add-task-wrap').querySelector('.img-preview-input'))" style="flex:1;">
+        <input type="file" class="img-preview-input" accept="image/*" multiple onchange="previewImage(this)" style="display:none;">
         <button class="img-upload-btn" onclick="this.previousElementSibling.click()">📷</button>
         <button class="add-submit primary" onclick="submitNewTask('${escapeAttr(projectName)}', this.closest('.add-task-wrap').querySelector('.task-input'), this.closest('.add-task-wrap').querySelector('.img-preview-input'))">+</button>
       </div>
-      <div class="img-preview-wrap" style="display:none;">
-        <img class="img-preview" alt="preview">
-        <button class="img-remove-btn" onclick="clearImage(this.closest('.add-task-wrap').querySelector('.img-preview'), this.closest('.add-task-wrap').querySelector('.img-preview-input'))">✕</button>
-      </div>
+      <div class="img-preview-wrap" style="display:none;"></div>
     `;
     card.appendChild(addWrap);
 
@@ -426,20 +430,20 @@ function handleInputKey(event, projectName, inputEl, fileInputEl){
   }
 }
 
-// Handle paste event for images (Ctrl+V)
+// Handle paste event for images (Ctrl+V), supports multiple images
 function handlePaste(event, inputEl, fileInputEl){
   const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  let hasImage = false;
+  for(let item of items){
+    if(item.type.indexOf('image') !== -1){ hasImage = true; break; }
+  }
+  if(!hasImage) return; // allow default text paste
+  event.preventDefault();
+  const wrap = inputEl.closest('.add-task-wrap');
   for(let item of items){
     if(item.type.indexOf('image') !== -1){
-      event.preventDefault();
       const blob = item.getAsFile();
-      // Create a DataTransfer object to simulate file input
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(blob);
-      fileInputEl.files = dataTransfer.files;
-      // Trigger preview
-      previewImage(fileInputEl);
-      break;
+      if(blob) addImageFromFile(wrap, blob);
     }
   }
 }
@@ -474,20 +478,22 @@ async function removeProject(name){
 
 async function submitNewTask(project, inputEl, fileInputEl){
   const text = inputEl ? inputEl.value.trim() : '';
+  const wrap = inputEl.closest('.add-task-wrap');
+  const pending = wrap._pendingImages || [];
   let imageData = null;
   let caption = text;
 
-  // Check if there's an image from file input
-  if(fileInputEl && fileInputEl.files && fileInputEl.files[0]){
-    imageData = await readFileAsDataURL(fileInputEl.files[0]);
-    // If no text caption, use a default
+  // Build image data from pending images
+  if(pending.length === 1){
+    imageData = pending[0];
     if(!text) caption = 'Task dengan gambar';
+  } else if(pending.length > 1){
+    imageData = JSON.stringify(pending);
+    if(!text) caption = `Task dengan ${pending.length} gambar`;
+  } else if(!text) {
+    return; // no image and no text
   }
 
-  // If no image and no text, return
-  if(!imageData && !text) return;
-
-  const wrap = inputEl.closest('.add-task-wrap');
   const urgentBtn = wrap.querySelector('.urgent-toggle');
   const urgent = urgentBtn.getAttribute('data-urgent') === '1';
 
@@ -497,13 +503,9 @@ async function submitNewTask(project, inputEl, fileInputEl){
   urgentBtn.setAttribute('data-urgent','0');
   urgentBtn.classList.remove('on');
 
-  // Clear preview
-  if(wrap){
-    const previewWrap = wrap.querySelector('.img-preview-wrap');
-    const previewImg = wrap.querySelector('.img-preview');
-    if(previewWrap) previewWrap.style.display = 'none';
-    if(previewImg) previewImg.src = '';
-  }
+  // Clear pending images preview
+  wrap._pendingImages = [];
+  renderPendingImages(wrap);
 
   const tempId = 'temp-' + Date.now();
   const nowStr = new Date().toISOString();
@@ -536,24 +538,53 @@ function readFileAsDataURL(file){
 
 function previewImage(input){
   const wrap = input.closest('.add-task-wrap');
-  const previewWrap = wrap.querySelector('.img-preview-wrap');
-  const previewImg = wrap.querySelector('.img-preview');
-  if(input.files && input.files[0] && previewImg && previewWrap){
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      previewImg.src = e.target.result;
-      previewWrap.style.display = 'inline-block';
-    };
-    reader.readAsDataURL(input.files[0]);
+  if(input.files && input.files.length){
+    Array.from(input.files).forEach(file => addImageFromFile(wrap, file));
+    input.value = ''; // clear so same files can be selected again
   }
 }
 
-function clearImage(img, fileInput){
-  const wrap = img.closest('.add-task-wrap');
+function addImageFromFile(wrap, file){
+  if(!file || !file.type.startsWith('image/')) return;
+  if(!wrap._pendingImages) wrap._pendingImages = [];
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    wrap._pendingImages.push(e.target.result);
+    renderPendingImages(wrap);
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePendingImage(wrap, index){
+  if(!wrap._pendingImages) return;
+  wrap._pendingImages.splice(index, 1);
+  renderPendingImages(wrap);
+}
+
+function renderPendingImages(wrap){
   const previewWrap = wrap.querySelector('.img-preview-wrap');
-  if(previewWrap) previewWrap.style.display = 'none';
-  img.src = '';
-  if(fileInput) fileInput.value = '';
+  if(!previewWrap) return;
+  if(!wrap._pendingImages || wrap._pendingImages.length === 0){
+    previewWrap.style.display = 'none';
+    previewWrap.innerHTML = '';
+    return;
+  }
+  previewWrap.innerHTML = wrap._pendingImages.map((src, i) => `
+    <div class="img-preview-thumb-wrap">
+      <img class="img-preview" src="${escapeAttr(src)}" alt="preview ${i+1}">
+      <button class="img-remove-btn" onclick="removePendingImage(this.closest('.add-task-wrap'), ${i})">✕</button>
+    </div>
+  `).join('');
+  previewWrap.style.display = 'flex';
+}
+
+function getImageArray(imageData){
+  if(!imageData) return [];
+  const s = String(imageData).trim();
+  if(s.startsWith('[')){
+    try { return JSON.parse(s); } catch(e){ return [imageData]; }
+  }
+  return [imageData];
 }
 
 async function completeTask(id){
@@ -593,12 +624,15 @@ function renderHistory(){
   }
   wrap.innerHTML = done.map(t => {
     let contentHtml = '';
-    if(t.image_data){
-      contentHtml += `<img src="${escapeAttr(t.image_data)}" class="task-img" alt="task image">`;
+    const imgs = getImageArray(t.image_data);
+    if(imgs.length){
+      contentHtml += '<div class="task-images">';
+      imgs.forEach(src => { contentHtml += `<img src="${escapeAttr(src)}" class="task-img" alt="task image">`; });
+      contentHtml += '</div>';
     }
     if(t.caption){
       contentHtml += `<div>${escapeHtml(t.caption)}</div>`;
-    } else if(!t.image_data) {
+    } else if(!imgs.length) {
       contentHtml += escapeHtml(t.task);
     }
     return `
