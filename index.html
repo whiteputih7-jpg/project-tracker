@@ -390,7 +390,7 @@ function render(){
     addRow.className = 'add-task-row';
     addRow.innerHTML = `
       <button class="urgent-toggle" data-urgent="0" onclick="toggleAddUrgent(this)">⚑</button>
-      <input type="text" placeholder="Task baru..." onkeydown="if(event.key==='Enter' &amp;&amp; !this.nextElementSibling.nextElementSibling.nextElementSibling.value) submitNewTask('${escapeAttr(projectName)}', this, this.nextElementSibling.nextElementSibling.nextElementSibling)" style="flex:1;">
+      <input type="text" placeholder="Task baru..." onkeydown="handleInputKey(event, '${escapeAttr(projectName)}', this, this.nextElementSibling.nextElementSibling.nextElementSibling, this.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling)" style="flex:1;">
       <input type="file" accept="image/*" onchange="previewImage(this)" style="display:none;">
       <button class="img-upload-btn" onclick="this.previousElementSibling.click()">📷</button>
       <img class="img-preview" onclick="clearImage(this)">
@@ -408,6 +408,13 @@ function toggleAddUrgent(btn){
   const on = btn.getAttribute('data-urgent') === '1';
   btn.setAttribute('data-urgent', on ? '0' : '1');
   btn.classList.toggle('on', !on);
+}
+
+function handleInputKey(event, projectName, inputEl, fileInputEl, addBtn){
+  if(event.key === 'Enter'){
+    event.preventDefault();
+    submitNewTask(projectName, inputEl, fileInputEl);
+  }
 }
 
 async function submitNewProject(){
