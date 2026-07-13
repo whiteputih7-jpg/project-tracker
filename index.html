@@ -390,7 +390,7 @@ function render(){
     addRow.className = 'add-task-row';
     addRow.innerHTML = `
       <button class="urgent-toggle" data-urgent="0" onclick="toggleAddUrgent(this)">⚑</button>
-      <input type="text" placeholder="Task baru..." onkeydown="handleInputKey(event, '${escapeAttr(projectName)}', this, this.nextElementSibling.nextElementSibling.nextElementSibling, this.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling)" style="flex:1;">
+      <input type="text" placeholder="Task baru... (Ctrl+V untuk paste gambar)" onpaste="handlePaste(event, this, this.nextElementSibling.nextElementSibling.nextElementSibling)" onkeydown="handleInputKey(event, '${escapeAttr(projectName)}', this, this.nextElementSibling.nextElementSibling.nextElementSibling, this.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling)" style="flex:1;">
       <input type="file" accept="image/*" onchange="previewImage(this)" style="display:none;">
       <button class="img-upload-btn" onclick="this.previousElementSibling.click()">📷</button>
       <img class="img-preview" onclick="clearImage(this)">
@@ -414,6 +414,24 @@ function handleInputKey(event, projectName, inputEl, fileInputEl, addBtn){
   if(event.key === 'Enter'){
     event.preventDefault();
     submitNewTask(projectName, inputEl, fileInputEl);
+  }
+}
+
+// Handle paste event for images (Ctrl+V)
+function handlePaste(event, inputEl, fileInputEl){
+  const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+  for(let item of items){
+    if(item.type.indexOf('image') !== -1){
+      event.preventDefault();
+      const blob = item.getAsFile();
+      // Create a DataTransfer object to simulate file input
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(blob);
+      fileInputEl.files = dataTransfer.files;
+      // Trigger preview
+      previewImage(fileInputEl);
+      break;
+    }
   }
 }
 
