@@ -185,6 +185,12 @@
   }
   .add-task-row .urgent-toggle.on{background:var(--red);color:var(--white);border-color:var(--red);}
   .add-task-row button.add-submit{padding:6px 10px;font-size:13px;}
+  .add-task-row .img-upload-btn{border:1px solid var(--blue-line);background:var(--white);color:var(--blue-deep);font-size:14px;padding:0 8px;border-radius:2px;cursor:pointer;}
+  .add-task-row .img-upload-btn:hover{background:var(--blue-tint);}
+  .add-task-row input[type=file]{display:none;}
+  .add-task-row .img-preview{max-width:80px;max-height:60px;margin-left:6px;border:1px solid var(--blue-line);border-radius:2px;display:none;}
+  .task-img{max-width:100%;margin-top:6px;border-radius:2px;border:1px solid var(--blue-tint);}
+  .task-caption{font-size:12px;color:#5A6B7A;margin-top:4px;font-style:italic;}
 
   #history-wrap{margin:0 24px 40px;}
   #history-list{
@@ -314,6 +320,8 @@ async function loadData(){
     id: t.id,
     project: t.project_name,
     task: t.task,
+    image_data: t.image_data || null,
+    caption: t.caption || '',
     urgent: t.urgent,
     dateCreated: t.date_created,
     dateCompleted: t.date_completed,
@@ -360,9 +368,18 @@ function render(){
     tasksForProject.forEach(t => {
       const li = document.createElement('li');
       li.className = 'task-row' + (t.urgent ? ' urgent' : '');
+      let taskHtml = '';
+      if(t.image_data){
+        taskHtml += `<img src="${escapeAttr(t.image_data)}" class="task-img" alt="task image">`;
+      }
+      if(t.caption){
+        taskHtml += `<div class="task-caption">${escapeHtml(t.caption)}</div>`;
+      } else if(!t.image_data) {
+        taskHtml += escapeHtml(t.task);
+      }
       li.innerHTML = `
         <input type="checkbox" onchange="completeTask('${t.id}')">
-        <div class="txt">${escapeHtml(t.task)}<div class="meta">dibuat ${formatDate(t.dateCreated)}</div></div>
+        <div class="txt">${taskHtml}<div class="meta">dibuat ${formatDate(t.dateCreated)}</div></div>
         <button class="flag-btn" title="Tandai urgent" onclick="toggleUrgent('${t.id}', ${!t.urgent})">⚑</button>
       `;
       list.appendChild(li);
@@ -373,8 +390,11 @@ function render(){
     addRow.className = 'add-task-row';
     addRow.innerHTML = `
       <button class="urgent-toggle" data-urgent="0" onclick="toggleAddUrgent(this)">⚑</button>
-      <input type="text" placeholder="Task baru..." onkeydown="if(event.key==='Enter') submitNewTask('${escapeAttr(projectName)}', this)">
-      <button class="add-submit primary" onclick="submitNewTask('${escapeAttr(projectName)}', this.previousElementSibling)">+</button>
+      <input type="text" placeholder="Task baru..." onkeydown="if(event.key==='Enter' &amp;&amp; !this.nextElementSibling.nextElementSibling.nextElementSibling.value) submitNewTask('${escapeAttr(projectName)}', this, this.nextElementSibling.nextElementSibling.nextElementSibling)" style="flex:1;">
+      <input type="file" accept="image/*" onchange="previewImage(this)" style="display:none;">
+      <button class="img-upload-btn" onclick="this.previousElementSibling.click()">📷</button>
+      <img class="img-preview" onclick="clearImage(this)">
+      <button class="add-submit primary" onclick="submitNewTask('${escapeAttr(projectName)}', this.previousElementSibling.previousElementSibling.previousElementSibling.previousElementSibling, this.previousElementSibling.previousElementSibling)">+</button>
     `;
     card.appendChild(addRow);
 
@@ -418,23 +438,45 @@ async function removeProject(name){
   setSyncing(false);
 }
 
-async function submitNewTask(project, inputEl){
-  const text = inputEl.value.trim();
-  if(!text) return;
-  const urgentBtn = inputEl.previousElementSibling;
+async function submitNewTask(project, inputEl, fileInputEl){
+  const text = inputEl ? inputEl.value.trim() : '';
+  let imageData = null;
+  let caption = text;
+
+  // Check if there's an image from file input
+  if(fileInputEl && fileInputEl.files && fileInputEl.files[0]){
+    imageData = await readFileAsDataURL(fileInputEl.files[0]);
+    // If no text caption, use a default
+    if(!text) caption = 'Task dengan gambar';
+  }
+
+  // If no image and no text, return
+  if(!imageData && !text) return;
+
+  const urgentBtn = inputEl.previousElementSibling.previousElementSibling.previousElementSibling.previousElementSibling;
   const urgent = urgentBtn.getAttribute('data-urgent') === '1';
-  inputEl.value = '';
+
+  // Clear inputs
+  if(inputEl) inputEl.value = '';
+  if(fileInputEl) fileInputEl.value = '';
   urgentBtn.setAttribute('data-urgent','0');
   urgentBtn.classList.remove('on');
 
+  // Clear preview
+  const preview = fileInputEl.nextElementSibling.nextElementSibling;
+  if(preview && preview.classList.contains('img-preview')){
+    preview.style.display = 'none';
+    preview.src = '';
+  }
+
   const tempId = 'temp-' + Date.now();
   const nowStr = new Date().toISOString();
-  state.tasks.push({ id: tempId, project, task: text, urgent, dateCreated: nowStr, dateCompleted: '', status: 'Belum' });
+  state.tasks.push({ id: tempId, project, task: caption, image_data: imageData, caption: text || '', urgent, dateCreated: nowStr, dateCompleted: '', status: 'Belum' });
   render();
 
   setSyncing(true);
   const { data, error } = await sb.from('tasks')
-    .insert({ project_name: project, task: text, urgent })
+    .insert({ project_name: project, task: caption, image_data: imageData, caption: text || '', urgent })
     .select().single();
   if(error){
     showBanner(error.message, 'error');
@@ -445,6 +487,34 @@ async function submitNewTask(project, inputEl){
     if(t) t.id = data.id;
   }
   setSyncing(false);
+}
+
+function readFileAsDataURL(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function previewImage(input){
+  const preview = input.nextElementSibling.nextElementSibling;
+  if(input.files && input.files[0] && preview){
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function clearImage(img){
+  img.style.display = 'none';
+  img.src = '';
+  const fileInput = img.previousElementSibling.previousElementSibling;
+  if(fileInput) fileInput.value = '';
 }
 
 async function completeTask(id){
@@ -482,12 +552,22 @@ function renderHistory(){
     wrap.innerHTML = '<div class="empty-msg">Belum ada task selesai.</div>';
     return;
   }
-  wrap.innerHTML = done.map(t => `
+  wrap.innerHTML = done.map(t => {
+    let contentHtml = '';
+    if(t.image_data){
+      contentHtml += `<img src="${escapeAttr(t.image_data)}" class="task-img" alt="task image">`;
+    }
+    if(t.caption){
+      contentHtml += `<div>${escapeHtml(t.caption)}</div>`;
+    } else if(!t.image_data) {
+      contentHtml += escapeHtml(t.task);
+    }
+    return `
     <div class="hist-row">
-      <div><span class="proj">${escapeHtml(t.project)}</span><br>${escapeHtml(t.task)}</div>
+      <div><span class="proj">${escapeHtml(t.project)}</span><br>${contentHtml}</div>
       <div class="date">selesai ${formatDate(t.dateCompleted)}</div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function toggleHistory(){
