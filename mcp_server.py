@@ -255,9 +255,10 @@ async def main():
             InitializationOptions(
                 server_name="project-tracker-mcp",
                 server_version="0.1.0",
-                capabilities=app.get_capabilities(),
-                notification_options=NotificationOptions(),
-                experimental_capabilities={},
+                capabilities=app.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
             ),
         )
 
