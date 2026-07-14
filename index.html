@@ -196,8 +196,23 @@
   .img-preview-thumb-wrap .img-remove-btn:hover{background:var(--red-tint);}
   .task-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
   .task-img{max-width:100%;border-radius:2px;border:1px solid var(--blue-tint);}
-  .task-img{max-width:100%;margin-top:6px;border-radius:2px;border:1px solid var(--blue-tint);}
   .task-caption{font-size:12px;color:#5A6B7A;margin-top:4px;font-style:italic;}
+  .task-img{cursor:pointer;transition:opacity 0.15s;}
+  .task-img:hover{opacity:0.85;}
+  .img-modal{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);
+    z-index:1000;align-items:center;justify-content:center;padding:20px;
+    cursor:zoom-out;
+  }
+  .img-modal.show{display:flex;}
+  .img-modal img{max-width:90vw;max-height:90vh;object-fit:contain;border-radius:4px;cursor:default;}
+  .img-modal .img-modal-close{
+    position:absolute;top:16px;right:16px;background:rgba(0,0,0,0.5);
+    border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:20px;
+    width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;
+    align-items:center;justify-content:center;transition:background 0.15s;
+  }
+  .img-modal .img-modal-close:hover{background:rgba(255,255,255,0.2);}
 
   #history-wrap{margin:0 24px 40px;}
   #history-list{
@@ -283,6 +298,11 @@
       <button class="primary" onclick="submitNewProject()">Simpan</button>
     </div>
   </div>
+</div>
+
+<div class="img-modal" id="img-modal" onclick="closeImgModal(event)">
+  <button class="img-modal-close" onclick="closeImgModal()">✕</button>
+  <img id="img-modal-img" src="" alt="perbesar gambar">
 </div>
 
 <script>
@@ -660,6 +680,25 @@ function escapeHtml(str){
 function escapeAttr(str){
   return String(str).replace(/'/g, "\\'");
 }
+
+// ---- Image zoom modal ----
+function openImgModal(src){
+  document.getElementById('img-modal-img').src = src;
+  document.getElementById('img-modal').classList.add('show');
+}
+function closeImgModal(event){
+  if(event && !event.target.closest('img') && !event.target.classList.contains('img-modal-close') && event.target.id !== 'img-modal') return;
+  document.getElementById('img-modal').classList.remove('show');
+  setTimeout(() => { document.getElementById('img-modal-img').src = ''; }, 300);
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') document.getElementById('img-modal').classList.remove('show');
+});
+// Click task image to zoom
+document.addEventListener('click', function(e){
+  const img = e.target.closest('.task-img');
+  if(img) { e.stopPropagation(); openImgModal(img.src); }
+});
 
 // ---- Realtime sync across devices ----
 sb.channel('public:tasks-projects')
