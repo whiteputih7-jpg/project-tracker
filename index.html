@@ -371,7 +371,7 @@
       <button class="wb-tool" onclick="wbClearCanvas()">🗑 Hapus</button>
     </div>
     <div class="wb-body">
-      <canvas id="wb-canvas"></canvas>
+      <canvas id="wb-canvas" tabindex="0" style="outline:none;"></canvas>
       <div class="wb-dropzone" id="wb-dropzone">
         <p>Paste <b>Ctrl+V</b> atau <b>tarik gambar</b> ke sini</p>
       </div>
@@ -814,6 +814,7 @@ let wbResizeHandle = null;
 let wbBackground = null; // base64 data-URL or null
 let wbCanvas, wbCtx;
 let wbTextInput = null;
+let wbPasteDoc = null;
 
 function openWhiteboard(){
   const ov = document.getElementById('wb-overlay');
@@ -846,12 +847,23 @@ function openWhiteboard(){
   wbCanvas.addEventListener('paste', wbPasteHandler);
   wbCanvas.addEventListener('dragover', e => e.preventDefault());
   wbCanvas.addEventListener('drop', wbDropHandler);
+  // global paste when whiteboard is open
+  wbPasteDoc = function(e){
+    if(document.getElementById('wb-overlay').classList.contains('show')){
+      const target = e.target;
+      // don't intercept if paste is in an input field
+      if(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      wbPasteHandler(e);
+    }
+  };
+  document.addEventListener('paste', wbPasteDoc);
 }
 function closeWhiteboard(){
   document.getElementById('wb-overlay').classList.remove('show');
   wbBackground = null;
   wbObjects = [];
   wbTextInput = null;
+  if(wbPasteDoc){ document.removeEventListener('paste', wbPasteDoc); wbPasteDoc = null; }
 }
 window.addEventListener('resize', () => {
   if(document.getElementById('wb-overlay').classList.contains('show')) resizeCanvas();
@@ -1119,6 +1131,16 @@ function wbDropHandler(e){
   }
 }
 
+// ---- background image aspect-ratio preserve ----
+function wbDrawBackground(img, ctx, cw, ch){
+  if(!ctx) ctx = wbCtx;
+  if(!cw) cw = wbCanvas.width;
+  if(!ch) ch = wbCanvas.height;
+  const s = Math.min(cw / img.width, ch / img.height);
+  const dw = img.width * s, dh = img.height * s;
+  ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+}
+
 // ---- redraw ----
 function wbRedraw(){
   if(!wbCtx) return;
@@ -1127,7 +1149,7 @@ function wbRedraw(){
   if(wbBackground){
     const img = new Image();
     img.onload = () => {
-      wbCtx.drawImage(img,0,0,wbCanvas.width,wbCanvas.height);
+      wbDrawBackground(img);
       drawObjects();
     };
     img.src = wbBackground;
@@ -1224,7 +1246,7 @@ async function wbAddToTask(){
   capCanvas.width = wbCanvas.width;
   capCanvas.height = wbCanvas.height;
   const capCtx = capCanvas.getContext('2d');
-  if(bgImg) capCtx.drawImage(bgImg, 0, 0, capCanvas.width, capCanvas.height);
+  if(bgImg) wbDrawBackground(bgImg, capCtx, capCanvas.width, capCanvas.height);
   // Draw objects on capture canvas
   wbObjects.forEach(obj => {
     capCtx.save();
